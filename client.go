@@ -97,6 +97,7 @@ type Client struct {
 
 	historySyncNotifications  chan *waE2E.HistorySyncNotification
 	historySyncHandlerStarted atomic.Bool
+	ManualHistorySyncDownload bool
 
 	uploadPreKeysLock sync.Mutex
 	lastPreKeyUpload  time.Time
@@ -159,6 +160,10 @@ type Client struct {
 
 	// Should SubscribePresence return an error if no privacy token is stored for the user?
 	ErrorOnSubscribePresenceWithoutToken bool
+
+	SendReportingTokens bool
+
+	BackgroundEventCtx context.Context
 
 	phoneLinkingCache *phoneLinkingCache
 
@@ -250,6 +255,8 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 
 		EnableAutoReconnect: true,
 		AutoTrustIdentity:   true,
+
+		BackgroundEventCtx: context.Background(),
 	}
 	cli.nodeHandlers = map[string]nodeHandler{
 		"message":      cli.handleEncryptedMessage,
