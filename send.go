@@ -25,7 +25,6 @@ import (
 	"go.mau.fi/libsignal/protocol"
 	"go.mau.fi/libsignal/session"
 	"go.mau.fi/libsignal/signalerror"
-	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/random"
 	"google.golang.org/protobuf/proto"
 
@@ -291,7 +290,7 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 	if to.Server == types.GroupServer || to.Server == types.BroadcastServer {
 		start := time.Now()
 		if len(req.TargetJID) > 0 {
-			groupParticipants = req.TargetJID
+			groupParticipants = append(groupParticipants, req.TargetJID...)
 		} else {
 			if to.Server == types.GroupServer {
 				var cachedData *groupMetaCache
@@ -305,10 +304,6 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 				if cachedData.AddressingMode == types.AddressingModeLID {
 					ownID = cli.getOwnLID()
 					extraParams.addressingMode = types.AddressingModeLID
-					if req.Meta == nil {
-						req.Meta = &types.MsgMetaInfo{}
-					}
-					req.Meta.DeprecatedLIDSession = ptr.Ptr(false)
 				} else if cachedData.CommunityAnnouncementGroup && req.Meta != nil {
 					ownID = cli.getOwnLID()
 					// Why is this set to PN?
@@ -326,11 +321,6 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 		resp.DebugTimings.GetParticipants = time.Since(start)
 	} else if to.Server == types.HiddenUserServer {
 		ownID = cli.getOwnLID()
-		extraParams.addressingMode = types.AddressingModeLID
-		// if req.Meta == nil {
-		// 	req.Meta = &types.MsgMetaInfo{}
-		// }
-		// req.Meta.DeprecatedLIDSession = ptr.Ptr(false)
 	}
 	if req.Meta != nil {
 		extraParams.metaNode = &waBinary.Node{
@@ -1192,7 +1182,7 @@ func (cli *Client) encryptMessageForDevices(
 	for _, jid := range allDevices {
 		plaintext := msgPlaintext
 		if (jid.User == ownJID.User || jid.User == ownLID.User) && dsmPlaintext != nil {
-			if jid == ownJID {
+			if jid == ownJID || jid == ownLID {
 				continue
 			}
 			plaintext = dsmPlaintext
