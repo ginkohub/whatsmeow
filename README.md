@@ -3,6 +3,13 @@
 
 whatsmeow is a Go library for the WhatsApp web multidevice API.
 
+## Replace to fork
+Use this commands to replace the original whatsmeow package with the fork:
+```sh
+go mod edit -replace go.mau.fi/whatsmeow=github.com/ginkohub/whatsmeow@bypass
+GOPROXY=direct go mod tidy
+```
+
 ## Discussion
 Matrix room: [#whatsmeow:maunium.net](https://matrix.to/#/#whatsmeow:maunium.net)
 
