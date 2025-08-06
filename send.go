@@ -87,6 +87,8 @@ type MessageDebugTimings struct {
 	Send  time.Duration
 	Resp  time.Duration
 	Retry time.Duration
+
+	Devices int
 }
 
 func (mdt MessageDebugTimings) MarshalZerologObject(evt *zerolog.Event) {
@@ -152,6 +154,10 @@ type SendRequestExtra struct {
 	Timeout time.Duration
 	// When sending media to newsletters, the Handle field returned by the file upload.
 	MediaHandle string
+
+	// Specify target jid for encrypted messages
+	// If present and not empty, the message is encrypted for the specified jid
+	TargetJID []types.JID
 
 	Meta *types.MsgMetaInfo
 	// use this only if you know what you are doing
@@ -295,28 +301,33 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 	var groupParticipants []types.JID
 	if to.Server == types.GroupServer || to.Server == types.BroadcastServer {
 		start := time.Now()
-		if to.Server == types.GroupServer {
-			var cachedData *groupMetaCache
-			cachedData, err = cli.getCachedGroupData(ctx, to)
-			if err != nil {
-				err = fmt.Errorf("failed to get group members: %w", err)
-				return
-			}
-			groupParticipants = cachedData.Members
-			// TODO this is fairly hacky, is there a proper way to determine which identity the message is sent with?
-			if cachedData.AddressingMode == types.AddressingModeLID {
-				ownID = cli.getOwnLID()
-				extraParams.addressingMode = types.AddressingModeLID
-			} else if cachedData.CommunityAnnouncementGroup && req.Meta != nil {
-				ownID = cli.getOwnLID()
-				// Why is this set to PN?
-				extraParams.addressingMode = types.AddressingModePN
-			}
+		if len(req.TargetJID) > 0 {
+			groupParticipants = append(groupParticipants, req.TargetJID...)
 		} else {
-			groupParticipants, err = cli.getBroadcastListParticipants(ctx, to)
-			if err != nil {
-				err = fmt.Errorf("failed to get broadcast list members: %w", err)
-				return
+			if to.Server == types.GroupServer {
+				var cachedData *groupMetaCache
+				cachedData, err = cli.getCachedGroupData(ctx, to)
+				if err != nil {
+					err = fmt.Errorf("failed to get group members: %w", err)
+					return
+				}
+				groupParticipants = cachedData.Members
+				// TODO this is fairly hacky, is there a proper way to determine which identity the message is sent with?
+				if cachedData.AddressingMode == types.AddressingModeLID {
+					ownID = cli.getOwnLID()
+					extraParams.addressingMode = types.AddressingModeLID
+				} else if cachedData.CommunityAnnouncementGroup && req.Meta != nil {
+					ownID = cli.getOwnLID()
+					// Why is this set to PN?
+					extraParams.addressingMode = types.AddressingModePN
+				}
+			} else {
+				// TODO use context
+				groupParticipants, err = cli.getBroadcastListParticipants(ctx, to)
+				if err != nil {
+					err = fmt.Errorf("failed to get broadcast list members: %w", err)
+					return
+				}
 			}
 		}
 		resp.DebugTimings.GetParticipants = time.Since(start)
@@ -375,7 +386,7 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 
 	respChan := cli.waitResponse(req.ID)
 	// Peer message retries aren't implemented yet
-	if !req.Peer {
+	if !req.Peer || len(req.TargetJID) > 0 {
 		cli.addRecentMessage(to, req.ID, message, nil)
 	}
 
@@ -788,6 +799,8 @@ func (cli *Client) sendGroup(
 	if err != nil {
 		return "", nil, err
 	}
+
+	timings.Devices = len(allDevices)
 
 	phash := participantListHashV2(allDevices)
 	node.Attrs["phash"] = phash
