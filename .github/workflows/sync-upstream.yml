@@ -1,0 +1,39 @@
+name: Auto Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/tulir/whatsmeow.git || true
+
+          git fetch upstream
+
+          git checkout main
+          git reset --hard upstream/main
+
+          git push origin main
+
+          git checkout bypass
+          git rebase main
+
+          git push origin bypass --force
+
